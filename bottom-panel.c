@@ -167,17 +167,14 @@ void bottom_panel_render(struct wlchewing_bottom_panel *panel,
 	cairo_paint(cairo);
 	cairo_set_operator(cairo, CAIRO_OPERATOR_OVER);
 
-	int offset = 0, total_offset = 0;
-	offset = render_cand(panel, buffer,
+	int offset = render_cand(panel, buffer,
 		chewing_cand_string_by_index_static(ctx,
 		panel->selected_index), true);
 	for (int i = panel->selected_index + 1; i < total; i++) {
 		cairo_translate(cairo, offset, 0);
-		total_offset += offset;
 		offset = render_cand(panel, buffer,
 			chewing_cand_string_by_index_static(ctx, i), false);
 	}
-	cairo_translate(cairo, -total_offset, 0);
 	cairo_restore(cairo);
 	wl_surface_attach(panel->wl_surface, buffer->wl_buffer, 0, 0);
 	wl_surface_damage_buffer(panel->wl_surface, 0, 0,
