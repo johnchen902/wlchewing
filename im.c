@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <linux/input-event-codes.h>
 #include <sys/mman.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -17,16 +18,60 @@ static void noop() {
 
 static void vte_hack(struct wlchewing_state *state);
 
-static bool commit_bottom_panel(struct wlchewing_state *state, int offset) {
-	int index = state->bottom_panel->selected_index + offset;
-	if (index >= chewing_cand_TotalChoice(state->chewing)) {
-		return false;
-	}
+static void commit_bottom_panel_by_index(struct wlchewing_state *state,
+		int index) {
 	chewing_cand_choose_by_index(state->chewing, index);
 	chewing_cand_close(state->chewing);
 	bottom_panel_destroy(state->bottom_panel);
 	state->bottom_panel = NULL;
+}
+
+static bool commit_bottom_panel_by_offset(struct wlchewing_state *state,
+		int offset) {
+	int index = state->bottom_panel->selected_index + offset;
+	if (index >= chewing_cand_TotalChoice(state->chewing)) {
+		return false;
+	}
+	commit_bottom_panel_by_index(state, index);
 	return true;
+}
+
+static void update_input_method(struct wlchewing_state *state) {
+	const char *precommit = chewing_buffer_String_static(state->chewing);
+	const char *bopomofo = chewing_bopomofo_String_static(state->chewing);
+	int chewing_cursor = chewing_cursor_Current(state->chewing);
+	// chewing_cursor here is counted in utf-8 characters, not in bytes
+	int byte_cursor = 0;
+	for (int i = 0; i < chewing_cursor ; i++) {
+		uint8_t byte = precommit[byte_cursor];
+		if (!(byte & 0x80)) {
+			byte_cursor += 1;
+		}
+		else {
+			while (byte & 0x80) {
+				byte <<= 1;
+				byte_cursor++;
+			}
+		}
+	}
+	char *preedit = calloc(strlen(precommit) + strlen(bopomofo) + 1,
+		sizeof(char));
+	strncat(preedit, precommit, byte_cursor);
+	strcat(preedit, bopomofo);
+	strcat(preedit, &precommit[byte_cursor]);
+	bool need_hack = strlen(preedit) == 0;
+	zwp_input_method_v2_set_preedit_string(state->input_method, preedit,
+		byte_cursor, byte_cursor + strlen(bopomofo));
+	free(preedit);
+	if (chewing_commit_Check(state->chewing)) {
+		zwp_input_method_v2_commit_string(state->input_method,
+			chewing_commit_String_static(state->chewing));
+	}
+	zwp_input_method_v2_commit(state->input_method, state->serial);
+	wl_display_roundtrip(state->display);
+	if (need_hack) {
+		vte_hack(state);
+	}
 }
 
 int im_key_press(struct wlchewing_state *state, uint32_t key) {
@@ -80,19 +125,19 @@ int im_key_press(struct wlchewing_state *state, uint32_t key) {
 		switch(keysym){
 		case XKB_KEY_Return:
 		case XKB_KEY_KP_Enter:
-			need_update = commit_bottom_panel(state, 0);
+			need_update = commit_bottom_panel_by_offset(state, 0);
 			break;
 		case XKB_KEY_1 ... XKB_KEY_9:
-			need_update = commit_bottom_panel(state,
+			need_update = commit_bottom_panel_by_offset(state,
 					keysym - XKB_KEY_1);
 			break;
 		case XKB_KEY_KP_1 ... XKB_KEY_KP_9:
-			need_update = commit_bottom_panel(state,
+			need_update = commit_bottom_panel_by_offset(state,
 					keysym - XKB_KEY_KP_1);
 			break;
 		case XKB_KEY_0:
 		case XKB_KEY_KP_0:
-			need_update = commit_bottom_panel(state, 9);
+			need_update = commit_bottom_panel_by_offset(state, 9);
 			break;
 		case XKB_KEY_Left:
 		case XKB_KEY_KP_Left:
@@ -201,41 +246,7 @@ int im_key_press(struct wlchewing_state *state, uint32_t key) {
 		}
 	}
 
-	const char *precommit = chewing_buffer_String_static(state->chewing);
-	const char *bopomofo = chewing_bopomofo_String_static(state->chewing);
-	int chewing_cursor = chewing_cursor_Current(state->chewing);
-	// chewing_cursor here is counted in utf-8 characters, not in bytes
-	int byte_cursor = 0;
-	for (int i = 0; i < chewing_cursor ; i++) {
-		uint8_t byte = precommit[byte_cursor];
-		if (!(byte & 0x80)) {
-			byte_cursor += 1;
-		}
-		else {
-			while (byte & 0x80) {
-				byte <<= 1;
-				byte_cursor++;
-			}
-		}
-	}
-	char *preedit = calloc(strlen(precommit) + strlen(bopomofo) + 1,
-		sizeof(char));
-	strncat(preedit, precommit, byte_cursor);
-	strcat(preedit, bopomofo);
-	strcat(preedit, &precommit[byte_cursor]);
-	bool need_hack = strlen(preedit) == 0;
-	zwp_input_method_v2_set_preedit_string(state->input_method, preedit,
-		byte_cursor, byte_cursor + strlen(bopomofo));
-	free(preedit);
-	if (chewing_commit_Check(state->chewing)) {
-		zwp_input_method_v2_commit_string(state->input_method, 
-			chewing_commit_String_static(state->chewing));
-	}
-	zwp_input_method_v2_commit(state->input_method, state->serial);
-	wl_display_roundtrip(state->display);
-	if (need_hack) {
-		vte_hack(state);
-	}
+	update_input_method(state);
 	return KEY_HANDLE_ARM_TIMER;
 }
 
@@ -480,6 +491,49 @@ void im_release_all_keys(struct wlchewing_state *state) {
 	}
 }
 
+static void pointer_motion(void *data, struct wl_pointer *pointer,
+		uint32_t time, wl_fixed_t local_x, wl_fixed_t local_y) {
+	struct wlchewing_state *state = data;
+	state->pointer_local_x = local_x;
+	state->pointer_local_y = local_y;
+}
+
+static void pointer_button(void *data, struct wl_pointer *pointer,
+		uint32_t serial, uint32_t time, uint32_t button,
+		uint32_t button_state) {
+	struct wlchewing_state *state = data;
+	if (button == BTN_LEFT) {
+		state->btn_left_state = button_state;
+	}
+}
+
+static void pointer_frame(void *data, struct wl_pointer *pointer) {
+	struct wlchewing_state *state = data;
+	if (!state->last_btn_left_state && state->btn_left_state &&
+			state->bottom_panel) {
+		int candidate = bottom_panel_get_candidate_at(
+			state->bottom_panel, state->chewing,
+			state->pointer_local_x, state->pointer_local_y);
+		if (candidate >= 0) {
+			commit_bottom_panel_by_index(state, candidate);
+			update_input_method(state);
+		}
+	}
+	state->last_btn_left_state = state->btn_left_state;
+}
+
+static const struct wl_pointer_listener pointer_listener = {
+	.enter = noop,
+	.leave = noop,
+	.motion = pointer_motion,
+	.button = pointer_button,
+	.axis = noop,
+	.frame = pointer_frame,
+	.axis_source = noop,
+	.axis_stop = noop,
+	.axis_discrete = noop,
+};
+
 /* TODO for adding panel with input-method support
  * currently only panel with wlr-layer-shell
  */
@@ -505,6 +559,10 @@ void im_setup(struct wlchewing_state *state) {
 	wl_list_init(&state->press_sent_keysyms);
 
 	wl_display_roundtrip(state->display);
+}
+
+void im_setup_pointer(struct wlchewing_state *state) {
+	wl_pointer_add_listener(state->pointer, &pointer_listener, state);
 }
 
 static void vte_hack(struct wlchewing_state *state) {

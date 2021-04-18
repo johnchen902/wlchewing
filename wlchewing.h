@@ -58,9 +58,16 @@ struct wlchewing_state {
 	int32_t millis_offset;
 
 	int32_t serial;
+
+	struct wl_pointer *pointer;
+	wl_fixed_t pointer_local_x;
+	wl_fixed_t pointer_local_y;
+	uint32_t last_btn_left_state;
+	uint32_t btn_left_state;
 };
 
 void im_setup(struct wlchewing_state *state);
+void im_setup_pointer(struct wlchewing_state *state);
 
 int im_key_press(struct wlchewing_state *state, uint32_t key);
 

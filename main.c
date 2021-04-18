@@ -17,6 +17,7 @@ static void handle_signal(int signo) {
 	raise(signo);
 }
 
+static const struct wl_seat_listener seat_listener;
 static const struct wl_output_listener output_listener;
 
 static void handle_global(void *data, struct wl_registry *registry,
@@ -30,6 +31,7 @@ static void handle_global(void *data, struct wl_registry *registry,
 			&zwp_virtual_keyboard_manager_v1_interface, 1);
 	} else if (strcmp(interface, wl_seat_interface.name) == 0) {
 		state->seat = wl_registry_bind(registry, name, &wl_seat_interface, version);
+		wl_seat_add_listener(state->seat, &seat_listener, state);
 	} else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
 		state->layer_shell = wl_registry_bind(registry, name,
 			&zwlr_layer_shell_v1_interface, 1);
@@ -52,6 +54,25 @@ static void noop() {
 static const struct wl_registry_listener registry_listener = {
 	.global = handle_global,
 	.global_remove = noop,
+};
+
+static void seat_capabilities(void *data, struct wl_seat *seat,
+		uint32_t capabilities) {
+	struct wlchewing_state *state = data;
+
+	bool have_pointer = capabilities & WL_SEAT_CAPABILITY_POINTER;
+	if (have_pointer && state->pointer == NULL) {
+		state->pointer = wl_seat_get_pointer(seat);
+		im_setup_pointer(state);
+	} else if (!have_pointer && state->pointer != NULL) {
+		wl_pointer_release(state->pointer);
+		state->pointer = NULL;
+	}
+}
+
+static const struct wl_seat_listener seat_listener = {
+	.capabilities = seat_capabilities,
+	.name = noop,
 };
 
 static void output_scale(void *data, struct wl_output *output, int32_t scale) {

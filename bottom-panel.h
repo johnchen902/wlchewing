@@ -27,4 +27,7 @@ void bottom_panel_destroy(struct wlchewing_bottom_panel *panel);
 void bottom_panel_render(struct wlchewing_bottom_panel *panel,
 	ChewingContext *ctx);
 
+int bottom_panel_get_candidate_at(struct wlchewing_bottom_panel *panel,
+	ChewingContext *ctx, wl_fixed_t local_x, wl_fixed_t local_y);
+
 #endif

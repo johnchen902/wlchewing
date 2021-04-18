@@ -181,3 +181,25 @@ void bottom_panel_render(struct wlchewing_bottom_panel *panel,
 		buffer->width * buffer->scale, buffer->height * buffer->scale);
 	wl_surface_commit(panel->wl_surface);
 }
+
+int bottom_panel_get_candidate_at(struct wlchewing_bottom_panel *panel,
+		ChewingContext *ctx, wl_fixed_t local_x, wl_fixed_t local_y) {
+	int total = chewing_cand_TotalChoice(ctx);
+	assert(panel->selected_index < total);
+
+	int x = wl_fixed_to_int(local_x);
+	for (int i = panel->selected_index; i < total && x >= 0; i++) {
+		const char *text = chewing_cand_string_by_index_static(ctx, i);
+
+		int width;
+		pango_layout_set_text(panel->layout, text, -1);
+		pango_layout_get_size(panel->layout, &width, NULL);
+		width /= PANGO_SCALE;
+
+		if (x <= width + 8)
+			return i;
+		x -= width + 8;
+	}
+
+	return -1;
+}
