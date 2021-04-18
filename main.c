@@ -68,6 +68,15 @@ static void seat_capabilities(void *data, struct wl_seat *seat,
 		wl_pointer_release(state->pointer);
 		state->pointer = NULL;
 	}
+
+	bool have_touch = capabilities & WL_SEAT_CAPABILITY_TOUCH;
+	if (have_touch && state->touch == NULL) {
+		state->touch = wl_seat_get_touch(seat);
+		im_setup_touch(state);
+	} else if (!have_touch && state->touch != NULL) {
+		wl_touch_release(state->touch);
+		state->touch = NULL;
+	}
 }
 
 static const struct wl_seat_listener seat_listener = {

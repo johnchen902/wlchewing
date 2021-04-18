@@ -534,6 +534,63 @@ static const struct wl_pointer_listener pointer_listener = {
 	.axis_discrete = noop,
 };
 
+static void touch_down(void *data, struct wl_touch *touch, uint32_t serial,
+		uint32_t time, struct wl_surface *surface, int32_t id,
+		wl_fixed_t local_x, wl_fixed_t local_y) {
+	struct wlchewing_state *state = data;
+	if (state->touch_id == -1) {
+		state->touch_id = id;
+		state->touch_local_x = local_x;
+		state->touch_local_y = local_y;
+	}
+}
+
+static void touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+		uint32_t time, int32_t id) {
+	struct wlchewing_state *state = data;
+	if (id == state->touch_id) {
+		state->touch_id = -1;
+	}
+}
+
+static void touch_motion(void *data, struct wl_touch *touch,
+		uint32_t time, int32_t id,
+		wl_fixed_t local_x, wl_fixed_t local_y) {
+	struct wlchewing_state *state = data;
+	if (state->touch_id == id) {
+		state->touch_local_x = local_x;
+		state->touch_local_y = local_y;
+	}
+}
+
+static void touch_frame(void *data, struct wl_touch *touch) {
+	struct wlchewing_state *state = data;
+	if (state->touch_id >= 0 && state->bottom_panel) {
+		int candidate = bottom_panel_get_candidate_at(
+			state->bottom_panel, state->chewing,
+			state->touch_local_x, state->touch_local_y);
+		if (candidate >= 0) {
+			commit_bottom_panel_by_index(state, candidate);
+			update_input_method(state);
+		}
+	}
+}
+
+static void touch_cancel(void *data, struct wl_touch *touch) {
+	struct wlchewing_state *state = data;
+	state->touch_id = -1;
+}
+
+static const struct wl_touch_listener touch_listener = {
+	.down = touch_down,
+	.up = touch_up,
+	.motion = touch_motion,
+	.frame = touch_frame,
+	.cancel = touch_cancel,
+	.shape = noop,
+	.orientation = noop,
+};
+
 /* TODO for adding panel with input-method support
  * currently only panel with wlr-layer-shell
  */
@@ -563,6 +620,11 @@ void im_setup(struct wlchewing_state *state) {
 
 void im_setup_pointer(struct wlchewing_state *state) {
 	wl_pointer_add_listener(state->pointer, &pointer_listener, state);
+}
+
+void im_setup_touch(struct wlchewing_state *state) {
+	state->touch_id = -1;
+	wl_touch_add_listener(state->touch, &touch_listener, state);
 }
 
 static void vte_hack(struct wlchewing_state *state) {

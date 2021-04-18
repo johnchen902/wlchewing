@@ -64,10 +64,16 @@ struct wlchewing_state {
 	wl_fixed_t pointer_local_y;
 	uint32_t last_btn_left_state;
 	uint32_t btn_left_state;
+
+	struct wl_touch *touch;
+	int touch_id;
+	wl_fixed_t touch_local_x;
+	wl_fixed_t touch_local_y;
 };
 
 void im_setup(struct wlchewing_state *state);
 void im_setup_pointer(struct wlchewing_state *state);
+void im_setup_touch(struct wlchewing_state *state);
 
 int im_key_press(struct wlchewing_state *state, uint32_t key);
 
