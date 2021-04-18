@@ -62,8 +62,6 @@ struct wlchewing_state {
 
 void im_setup(struct wlchewing_state *state);
 
-void im_destory(struct wlchewing_state *state);
-
 int im_key_press(struct wlchewing_state *state, uint32_t key);
 
 void im_release_all_keys(struct wlchewing_state *state);

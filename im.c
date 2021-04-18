@@ -424,9 +424,7 @@ static void handle_deactivate(void *data,
 
 static void handle_unavailable(void *data,
 		struct zwp_input_method_v2 *zwp_input_method_v2) {
-	struct wlchewing_state *state = data;
 	wlchewing_err("IM unavailable");
-	im_destory(state);
 	exit(EXIT_FAILURE);
 }
 
@@ -507,17 +505,6 @@ void im_setup(struct wlchewing_state *state) {
 	wl_list_init(&state->press_sent_keysyms);
 
 	wl_display_roundtrip(state->display);
-}
-
-void im_destory(struct wlchewing_state *state) {
-	chewing_delete(state->chewing);
-	xkb_state_unref(state->xkb_state);
-	xkb_context_unref(state->xkb_context);
-	zwp_input_method_v2_destroy(state->input_method);
-	if (state->bottom_panel) {
-		bottom_panel_destroy(state->bottom_panel);
-		state->bottom_panel = NULL;
-	}
 }
 
 static void vte_hack(struct wlchewing_state *state) {
