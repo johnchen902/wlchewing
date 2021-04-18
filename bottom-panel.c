@@ -12,7 +12,6 @@ static void noop() {
 static void layer_surface_configure(void *data,
 		struct zwlr_layer_surface_v1 *wlr_layer_surface,
 		uint32_t serial, uint32_t w, uint32_t h) {
-	printf("resize %d %d\n", w, h);
 	struct wlchewing_bottom_panel *panel = data;
 	panel->width = w;
 	panel->height = h;
@@ -34,7 +33,6 @@ static void surface_enter(void *data, struct wl_surface *wl_surface,
 		struct wl_output *output) {
 	struct wlchewing_bottom_panel *panel = data;
 	panel->scale = *((int32_t *)wl_output_get_user_data(output));
-	printf("scale %d\n", panel->scale);
 }
 
 static const struct wl_surface_listener surface_listener = {
@@ -44,7 +42,6 @@ static const struct wl_surface_listener surface_listener = {
 
 static void bottom_panel_configure(struct wlchewing_bottom_panel *panel,
 		struct wlchewing_state *state){
-	printf("render scale %d\n", panel->scale);
 	struct wlchewing_buffer *buffer = buffer_new(state->shm,
 		panel->width, panel->height, panel->scale);
 	assert(buffer);
@@ -169,7 +166,6 @@ void bottom_panel_render(struct wlchewing_bottom_panel *panel,
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
 	cairo_paint(cairo);
 	cairo_set_operator(cairo, CAIRO_OPERATOR_OVER);
-	printf("selected %d\n", panel->selected_index);
 
 	int offset = 0, total_offset = 0;
 	offset = render_cand(panel, buffer,
